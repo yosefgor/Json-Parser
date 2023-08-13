@@ -1,0 +1,73 @@
+%{
+	int yylex();
+	void yyerror(const char* s);
+	//includes here...
+	#include <string>
+	#include "Object.hpp"
+
+	extern int yylineno;
+	Object result;
+
+	#ifdef MYDB
+		#define YYERROR_VERBOSE 1
+		#define YYDEBUG 1
+		extern int yydebug;
+	#endif
+
+	//additional code here...
+%}
+
+%union{
+	//lexer proivided fields:
+	std::string* string_literal;
+	int number_literal;
+	
+	//parser metadata fields:
+	InnerObject* iobj;
+	List* list;
+	Object* dict;//fix here
+	
+};
+
+
+%token <number_literal> NUMBER_LITERAL
+%token STRING_LITERAL
+%left LBRACE RBRACE LBRACKET RBRACKET 
+%token COMMA COLON
+
+%type <iobj> Exp, Atomic
+%type <list> List, ExpList
+%type <dict> Dict
+
+%%
+
+File:			Exp {result = Object($1, true);};
+Exp: 			List {$$ = $1;}
+				| Dict
+				| Atomic {$$ = $1;};
+Atomic:			NUMBER_LITERAL {$$ = new Number($1);}
+				;
+//				| STRING_LITERAL {$$ = new Object(new String(), true);};
+Dict:			LBRACE KeyValueList RBRACE;
+KeyValueList: 	KeyValue KeyValueList
+				| KeyValue;
+KeyValue:		Exp COLON Exp;
+List:			LBRACKET ExpList RBRACKET {$$ = $2;};
+ExpList:		Exp COMMA ExpList {$3->insert_and_own(Object($1, true));}
+				| Exp {$$ = new List(); $$->insert_and_own(Object($1, true));};
+
+%%
+
+void yyerror(const char* s){
+	printf("failed with error: '%s' at line: %d\n", s, yylineno);
+	exit(1);
+}
+
+int main(){
+	#ifdef MYDB
+		yydebug = 1;
+	#endif
+	int res = yyparse();
+	printf("parsing done with code: %d\n", res);
+	return res;
+}
